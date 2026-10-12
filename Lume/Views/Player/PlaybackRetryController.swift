@@ -20,6 +20,22 @@ final class PlaybackRetryController {
     /// Delay before each successive attempt, in seconds. The element count is
     /// the attempt budget (6 reconnects spanning ~31s before giving up).
     private static let backoff: [TimeInterval] = [1, 2, 4, 8, 8, 8]
+    /// The schedule for a source that answered "slot full" or "overloaded"
+    /// (HTTP 429 / 5xx): reconnecting within a second or two only keeps the
+    /// slot occupied. Same attempt budget, ~2 minutes in all.
+    private static let overloadedBackoff: [TimeInterval] = [5, 10, 20, 30, 30, 30]
+
+    enum Pace {
+        case normal
+        case overloaded
+
+        var schedule: [TimeInterval] {
+            switch self {
+            case .normal: PlaybackRetryController.backoff
+            case .overloaded: PlaybackRetryController.overloadedBackoff
+            }
+        }
+    }
 
     private var attempt = 0
     private var pending: Task<Void, Never>?
@@ -50,18 +66,19 @@ final class PlaybackRetryController {
     /// Schedule the next reconnect if the budget allows. A no-op while a retry
     /// is already pending, so the burst of repeated terminal-state callbacks a
     /// single outage produces collapses into one scheduled attempt.
-    func scheduleRetry(_ reload: @escaping () -> Void) {
+    func scheduleRetry(pace: Pace = .normal, _ reload: @escaping () -> Void) {
         guard pending == nil, !gaveUp else { return }
-        guard attempt < Self.backoff.count else {
+        let schedule = pace.schedule
+        guard attempt < schedule.count else {
             gaveUp = true
             let spent = attempt
             Logger.player.error("reconnect: giving up after \(spent, privacy: .public) attempts")
             return
         }
 
-        let delay = Self.backoff[attempt]
+        let delay = schedule[attempt]
         let number = attempt + 1
-        let total = Self.backoff.count
+        let total = schedule.count
         attempt += 1
         Logger.player.log("reconnect: attempt \(number, privacy: .public)/\(total, privacy: .public) in \(delay, format: .fixed(precision: 0), privacy: .public)s")
 

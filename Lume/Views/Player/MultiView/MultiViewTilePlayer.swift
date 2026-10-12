@@ -209,6 +209,7 @@ struct MultiViewTilePlayer: View {
                 role: role,
                 onPlaybackStarted: { isPlaying = true },
                 onPlaybackFailed: handleFailure,
+                onStreamGone: giveUp,
                 sourceMedia: self.media
             )
         }
@@ -235,6 +236,12 @@ struct MultiViewTilePlayer: View {
         engineAttempt += 1
         let prefix = role.logPrefix
         Logger.player.log("\(prefix, privacy: .public): \(failed.rawValue, privacy: .public) could not start the tile; falling back to \(engine.rawValue, privacy: .public)")
+    }
+
+    /// The stream is gone for every engine: stop without falling back.
+    private func giveUp() {
+        loadFailed = true
+        reportFailure()
     }
 
     private func reportFailure() {

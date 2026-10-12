@@ -258,6 +258,9 @@ struct MultiViewLumeTile: View {
     let role: MultiViewTileRole
     var onPlaybackStarted: () -> Void
     var onPlaybackFailed: () -> Void
+    /// The provider answered 404: give up without trying another engine, which
+    /// would ask for the same missing stream.
+    var onStreamGone: () -> Void
     let sourceMedia: PlayableMedia
 
     @StateObject private var coordinator = LumeEngineCoordinator()
@@ -276,8 +279,24 @@ struct MultiViewLumeTile: View {
                 coordinator.startupTimeout = usesQuickStartupTimeout
                     ? MultiViewTilePlayer.fallbackStartupTimeout
                     : MultiViewTilePlayer.startupTimeout
-                coordinator.onPlaybackFailure = onPlaybackFailed
-                coordinator.onStalled = { reconnector.scheduleRetry { coordinator.reload() } }
+                coordinator.onPlaybackFailure = { failure in
+                    failure == .notFound ? onStreamGone() : onPlaybackFailed()
+                }
+                coordinator.onStalled = { failure in
+                    guard failure != .notFound else {
+                        reconnector.cancel()
+                        onStreamGone()
+                        return
+                    }
+                    reconnector.scheduleRetry(pace: failure == .overloaded ? .overloaded : .normal) {
+                        coordinator.reload()
+                    }
+                    // A failed reconnect no longer lands on the startup-failure
+                    // path, so a spent budget hands over here instead.
+                    if reconnector.hasGivenUp {
+                        onPlaybackFailed()
+                    }
+                }
                 coordinator.onRecovered = { reconnector.reset() }
                 coordinator.configure(media: media)
             }

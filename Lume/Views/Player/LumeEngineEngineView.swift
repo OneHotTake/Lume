@@ -63,10 +63,17 @@ struct LumeEngineEngineView: View {
     /// host and handed to `NowPlayingService` with this engine's transport.
     /// `nil` on tvOS, where the Siri Remote already owns stream changes.
     var onRemoteAdvance: ((PlayerMediaSwapper.Step) -> Bool)?
+    /// A fresh URL for the stream when the provider refused the current one
+    /// (HTTP 401/403 mid-stream): set for Stalker, whose `create_link` URLs
+    /// expire. `nil` for sources that reconnect through their original URL.
+    var refreshStreamURL: (() async -> URL?)?
 
-    @StateObject private var coordinator = LumeEngineCoordinator()
+    @StateObject var coordinator = LumeEngineCoordinator()
     /// Drives bounded backoff reconnects when the stream drops mid-playback.
-    @State private var reconnector = PlaybackRetryController()
+    @State var reconnector = PlaybackRetryController()
+    /// A reconnect waiting on `refreshStreamURL`; cancelled when the player
+    /// goes away or the stream changes, so a late answer can't reopen it.
+    @State var urlRefresh: Task<Void, Never>?
     @State private var isControlsVisible = true
     /// Presents the OpenSubtitles browser. Held here rather than in the controls
     /// overlay: the overlay is removed when the controls auto-hide, which would
@@ -75,7 +82,7 @@ struct LumeEngineEngineView: View {
     /// Set once the stream is given up on (initial-load failure with no fallback
     /// left, or the reconnect budget spent). Swaps the player for the
     /// `PlayerErrorIndicator` (Try Again / Back).
-    @State private var loadFailed = false
+    @State var loadFailed = false
     @State private var isSeeking = false
     @State private var seekPosition: TimeInterval = 0
     @State private var hideTask: Task<Void, Never>?
@@ -208,6 +215,7 @@ struct LumeEngineEngineView: View {
             hideTask?.cancel()
             hoverHideTask?.cancel()
             reconnector.cancel()
+            urlRefresh?.cancel()
             NowPlayingService.shared.detachTransport(owner: coordinator)
             coordinator.tearDown()
         }
@@ -234,6 +242,7 @@ struct LumeEngineEngineView: View {
             isPanelOpen = false
             loadFailed = false
             reconnector.reset()
+            urlRefresh?.cancel()
             clock.reset()
             coordinator.configure(media: newMedia)
             resetHideTimer()
@@ -293,20 +302,8 @@ struct LumeEngineEngineView: View {
                 PlayerBackgrounding.pictureInPictureDidStop { closePlayer() }
             }
         #endif
-        coordinator.onPlaybackFailure = {
-            Logger.player.error("LumeEngine startup failure → \(reportsStartupFailure && !coordinator.hasStartedPlayback ? "falling back to next engine" : "failure overlay", privacy: .public)")
-            reportFailure()
-        }
-        coordinator.onStalled = {
-            // Mid-stream drop: bounded exponential backoff, then give up loudly.
-            if reconnector.hasGivenUp {
-                Logger.player.error("LumeEngine stall retries exhausted → failure overlay")
-                withAnimation(.easeInOut(duration: 0.25)) { loadFailed = true }
-            } else {
-                Logger.player.warning("LumeEngine stalled → scheduling engine reload")
-                reconnector.scheduleRetry { coordinator.reload() }
-            }
-        }
+        coordinator.onPlaybackFailure = { reportFailure($0) }
+        coordinator.onStalled = { reconnect(after: $0) }
         coordinator.onRecovered = { reconnector.reset() }
     }
 
@@ -518,18 +515,6 @@ struct LumeEngineEngineView: View {
         #else
             dismiss.dismissPlayer()
         #endif
-    }
-
-    /// The coordinator reported it can't start the stream. On an initial-load
-    /// failure with a fallback engine available, hand off to the host (which
-    /// switches engines); otherwise raise the failure overlay.
-    private func reportFailure() {
-        guard !loadFailed else { return }
-        if reportsStartupFailure, !coordinator.hasStartedPlayback {
-            onPlaybackFailed?()
-            return
-        }
-        withAnimation(.easeInOut(duration: 0.25)) { loadFailed = true }
     }
 
     /// Re-prepare the current stream after a failure (the Try Again button).

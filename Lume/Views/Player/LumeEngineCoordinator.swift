@@ -46,14 +46,16 @@ final class LumeEngineCoordinator: NSObject, ObservableObject {
 
     /// 10 Hz playback tick: (current, duration) in media-relative seconds.
     var onTime: ((TimeInterval, TimeInterval) -> Void)?
-    /// Initial-load failure (hard error or startup timeout before first frame).
-    var onPlaybackFailure: (() -> Void)?
+    /// Initial-load failure (hard error or startup timeout before first frame),
+    /// with its cause — `.interrupted` for the timeout.
+    var onPlaybackFailure: ((LumeEngineFailure) -> Void)?
     /// The PiP window went away, so the host can end the session if the user
     /// closed it rather than restoring the player.
     var onPictureInPictureStop: (() -> Void)?
-    /// Mid-stream stall after playback had started (the engine's watchdog);
-    /// the view routes this through `PlaybackRetryController`.
-    var onStalled: (() -> Void)?
+    /// Mid-stream drop after playback had started — the engine's stall
+    /// watchdog, or a failed session — with its cause; the view routes this
+    /// through `PlaybackRetryController`.
+    var onStalled: ((LumeEngineFailure) -> Void)?
     /// Playback reached a healthy playing state — the view resets its
     /// reconnect budget.
     var onRecovered: (() -> Void)?
@@ -99,7 +101,7 @@ final class LumeEngineCoordinator: NSObject, ObservableObject {
     /// The engine's video surface for the hosting representable.
     private(set) var displayLayer: LumeDisplayLayer?
 
-    private var session: PlayerSession?
+    private(set) var session: PlayerSession?
     private var pipBridge: PictureInPictureBridge?
     private var mediaInfo: MediaInfo?
     private var currentMedia: PlayableMedia?
@@ -108,7 +110,20 @@ final class LumeEngineCoordinator: NSObject, ObservableObject {
     /// 10 Hz tick counter driving the diagnostics heartbeat cadence.
     private var tickCount = 0
     private var startupTask: Task<Void, Never>?
-    private var reportedFailure = false
+    /// Set once this session has been reported as failed; see `streamFailed`.
+    var reportedFailure = false
+    /// Whether this stream played in an earlier session. A reconnect that fails
+    /// before its first frame is still a drop of a stream that played, so it
+    /// goes back through the reconnect budget rather than the startup-failure
+    /// path (engine fallback). Survives `reload`, cleared by `configure`.
+    private(set) var hasPlayedStream = false
+    /// Set by a `.failed` state until the `.error` that follows it names the
+    /// cause; the engine reports the two back to back.
+    private var isAwaitingFailureCause = false
+    /// Shutdown of every session torn down so far. The next session opens
+    /// only once it finishes (or `shutdownGrace` passes): a connection-capped
+    /// account answers 403 while the old session still holds its slot.
+    private var pendingShutdown: Task<Void, Never>?
     /// Mirrors `PlayerSession.selectedAudioTrackIndex`, read back after `open`
     /// rather than assumed: the engine starts on its own preferred/default
     /// pick, which is not necessarily the first track.
@@ -130,10 +145,31 @@ final class LumeEngineCoordinator: NSObject, ObservableObject {
     // MARK: Lifecycle
 
     func configure(media: PlayableMedia) {
-        tearDown()
         if media.url != currentMedia?.url {
             hasManualTrackSelection = false
         }
+        hasPlayedStream = false
+        start(media)
+    }
+
+    /// Fresh session for the same stream (stall recovery), resuming from the
+    /// current position for VOD. `url` swaps in a freshly resolved stream URL
+    /// (a Stalker link the provider refused) without counting as a new stream,
+    /// so a manual track pick survives it.
+    func reload(replacingURL url: URL? = nil) {
+        guard var media = currentMedia else { return }
+        if let url {
+            media = media.replacingURL(url)
+        }
+        if media.kind == .vod, let session {
+            let resumeAt = sessionPositionSnapshot(session)
+            media = media.resuming(at: resumeAt)
+        }
+        start(media)
+    }
+
+    private func start(_ media: PlayableMedia) {
+        tearDown()
         currentMedia = media
         reportedFailure = false
         // After `tearDown` (which closes any previous session) so a reload counts
@@ -160,7 +196,11 @@ final class LumeEngineCoordinator: NSObject, ObservableObject {
         }
         startupTask = makeStartupWatchdog()
 
+        let previousShutdown = pendingShutdown
         Task {
+            await Self.waitForShutdown(previousShutdown)
+            // Superseded while the previous session was closing.
+            guard self.session === session else { return }
             do {
                 let info = try await session.open(url: media.url.absoluteString)
                 self.mediaInfo = info
@@ -191,49 +231,9 @@ final class LumeEngineCoordinator: NSObject, ObservableObject {
                 // `tearDown` shuts a still-opening session down, which throws
                 // here; that is not this coordinator's stream failing.
                 guard self.session === session else { return }
-                self.reportFailure()
+                self.streamFailed((error as? EngineError).map(LumeEngineFailure.init) ?? .interrupted)
             }
         }
-    }
-
-    /// Startup failure watchdog. The window is rolling while the engine
-    /// demonstrably downloads: a multi-second buffer target on a ~1× link
-    /// legitimately pre-buffers past any fixed window, while a dead stream
-    /// shows no byte progress and still fails within `startupTimeout`. A hard
-    /// cap bounds pathological "downloads but never starts" cases.
-    private func makeStartupWatchdog() -> Task<Void, Never> {
-        Task { [startupTimeout] in
-            let hardDeadline = Date(timeIntervalSinceNow: max(startupTimeout * 3, 60))
-            var deadline = Date(timeIntervalSinceNow: startupTimeout)
-            var lastBytes: Int64 = 0
-            while !Task.isCancelled, !self.hasStartedPlayback {
-                try? await Task.sleep(for: .seconds(5))
-                guard !Task.isCancelled, !self.hasStartedPlayback else { return }
-                if let session = self.session {
-                    let bytes = await session.diagnostics.deliveredBytes
-                    if bytes > lastBytes {
-                        lastBytes = bytes
-                        deadline = min(Date(timeIntervalSinceNow: startupTimeout), hardDeadline)
-                    }
-                }
-                if Date() >= deadline {
-                    Logger.player.error("LumeEngine startup window elapsed (read \(lastBytes) bytes, never played)")
-                    self.reportFailure()
-                    return
-                }
-            }
-        }
-    }
-
-    /// Fresh session for the same stream (stall recovery), resuming from the
-    /// current position for VOD.
-    func reload() {
-        guard var media = currentMedia else { return }
-        if media.kind == .vod, let session {
-            let resumeAt = sessionPositionSnapshot(session)
-            media = media.resuming(at: resumeAt)
-        }
-        configure(media: media)
     }
 
     func tearDown() {
@@ -246,9 +246,14 @@ final class LumeEngineCoordinator: NSObject, ObservableObject {
         startupTask = nil
         pipBridge = nil
         if let session {
-            Task { await session.shutdown() }
+            let previous = pendingShutdown
+            pendingShutdown = Task {
+                await session.shutdown()
+                await previous?.value
+            }
         }
         session = nil
+        isAwaitingFailureCause = false
         mediaInfo = nil
         displayLayer = nil
         isPlaying = false
@@ -425,24 +430,22 @@ final class LumeEngineCoordinator: NSObject, ObservableObject {
             }
             if state == .playing {
                 hasStartedPlayback = true
+                hasPlayedStream = true
                 PlaybackQoE.shared.noteFirstFrame()
                 onRecovered?()
             }
             if state == .failed {
-                // Local copy: os_log interpolation is an autoclosure; swiftformat strips `self.`
-                let started = hasStartedPlayback
-                Logger.player.error("LumeEngine failed (hasStartedPlayback: \(started))")
-                if hasStartedPlayback {
-                    onStalled?()
-                } else {
-                    reportFailure()
-                }
+                isAwaitingFailureCause = true
             }
         case let .stalled(position):
             Logger.player.warning("LumeEngine stalled at \(position, format: .fixed(precision: 2))s")
-            onStalled?()
+            onStalled?(.interrupted)
         case let .error(error):
             Logger.player.error("LumeEngine error: \(LogRedaction.scrubURLs(in: String(describing: error)), privacy: .public)")
+            if isAwaitingFailureCause {
+                isAwaitingFailureCause = false
+                streamFailed(LumeEngineFailure(error))
+            }
         case let .didSeek(position):
             Logger.player.info("LumeEngine didSeek → \(position, format: .fixed(precision: 2))s")
         case let .decoderDowngraded(error):
@@ -527,15 +530,6 @@ final class LumeEngineCoordinator: NSObject, ObservableObject {
             return TrackLanguageMatcher.displayName(for: language)
         }
         return fallback
-    }
-
-    private func reportFailure() {
-        guard !reportedFailure else { return }
-        reportedFailure = true
-        if !hasStartedPlayback {
-            PlaybackQoE.shared.noteStartupFailure()
-        }
-        onPlaybackFailure?()
     }
 
     private func sessionPositionSnapshot(_ session: PlayerSession) -> TimeInterval {
