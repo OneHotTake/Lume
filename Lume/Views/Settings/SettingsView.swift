@@ -152,6 +152,8 @@ struct SettingsView: View {
         @AppStorage(HomeLayoutSettings.sectionOrderKey) var homeSectionOrderRaw = ""
         @AppStorage(HomeLayoutSettings.disabledSectionsKey) var homeDisabledSectionsRaw = ""
         @AppStorage(HomeLayoutSettings.enabledSectionsKey) var homeEnabledSectionsRaw = ""
+        @AppStorage(HomeLayoutSettings.recentlyWatchedIncludesLiveTVKey)
+        var homeRecentlyWatchedIncludesLiveTV = HomeLayoutSettings.recentlyWatchedIncludesLiveTVDefault
 
         /// The user's ordered engine fallback list (migrates the legacy single-engine
         /// key on first read). The first entry is the primary engine. Not `private`:

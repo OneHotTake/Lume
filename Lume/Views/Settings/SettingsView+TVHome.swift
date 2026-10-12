@@ -78,6 +78,18 @@ import SwiftUI
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, TVSettingsMetrics.rowHPadding)
                     .padding(.top, 6)
+
+                TVSettingsSectionLabel("Recently Watched")
+                    .padding(.top, 24)
+
+                TVOptionToggleRow(title: "Include Live TV Channels", isOn: $homeRecentlyWatchedIncludesLiveTV)
+                    .disabled(!isHomeSectionEnabled(.recentlyWatched))
+
+                Text("Show channels you've watched alongside movies and series.")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, TVSettingsMetrics.rowHPadding)
+                    .padding(.top, 6)
             }
         }
 

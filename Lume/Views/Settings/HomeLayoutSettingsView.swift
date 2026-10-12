@@ -12,6 +12,8 @@
         @AppStorage(HomeLayoutSettings.sectionOrderKey) private var sectionOrderRaw = ""
         @AppStorage(HomeLayoutSettings.disabledSectionsKey) private var disabledSectionsRaw = ""
         @AppStorage(HomeLayoutSettings.enabledSectionsKey) private var enabledSectionsRaw = ""
+        @AppStorage(HomeLayoutSettings.recentlyWatchedIncludesLiveTVKey)
+        private var recentlyWatchedIncludesLiveTV = HomeLayoutSettings.recentlyWatchedIncludesLiveTVDefault
         @State private var premium = PremiumManager.shared
         @State private var showPaywall = false
         @State private var paywallHighlight: PremiumFeature = .recommendations
@@ -37,6 +39,15 @@
                     Text("Sections")
                 } footer: {
                     Text("Turn sections on or off and reorder them. Each appears on Home only when it has something to show. \"For You\" is built on-device from your library and what you watch.")
+                }
+
+                Section {
+                    Toggle("Include Live TV Channels", isOn: $recentlyWatchedIncludesLiveTV)
+                        .disabled(!HomeLayoutSettings.isEnabled(.recentlyWatched, disabledRaw: disabledSectionsRaw))
+                } header: {
+                    Text("Recently Watched")
+                } footer: {
+                    Text("Show channels you've watched alongside movies and series.")
                 }
             }
             .platformNavigationTitle("Home")

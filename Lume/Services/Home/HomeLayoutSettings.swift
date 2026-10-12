@@ -109,6 +109,11 @@ enum HomeLayoutSettings {
     /// Opt-in sections the user has switched on, encoded like the disabled set.
     static let enabledSectionsKey = "home.enabledSections.v1"
 
+    /// Whether the Recently Watched row mixes in live channels alongside movies
+    /// and series. On by default, which is how the row has always behaved.
+    static let recentlyWatchedIncludesLiveTVKey = "home.recentlyWatchedIncludesLiveTV.v1"
+    static let recentlyWatchedIncludesLiveTVDefault = true
+
     static func decodeDisabled(_ raw: String) -> Set<HomeSection> {
         Set(raw.split(separator: ",").compactMap { HomeSection(rawValue: String($0)) })
     }

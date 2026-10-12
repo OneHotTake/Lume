@@ -26503,6 +26503,65 @@
         }
       }
     },
+    "Include Live TV Channels" : {
+      "comment" : "Settings › Home › Recently Watched: switch that mixes watched live channels into the Home Recently Watched row.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live-TV-Sender einbeziehen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Include Live TV Channels"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Incluir canales de TV en directo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inclure les chaînes de TV en direct"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Includi i canali TV in diretta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブTVのチャンネルを含める"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라이브 TV 채널 포함"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Incluir canais de TV ao vivo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包含直播电视频道"
+          }
+        }
+      }
+    },
     "Included" : {
       "localizations" : {
         "de" : {
@@ -51834,6 +51893,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“显示全部”和“隐藏全部”作用于列表当前显示的内容，因此你可以先搜索，再对匹配项批量应用。"
+          }
+        }
+      }
+    },
+    "Show channels you've watched alongside movies and series." : {
+      "comment" : "Settings › Home › Recently Watched: footnote under the Include Live TV Channels switch.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt gesehene Sender neben Filmen und Serien an."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show channels you've watched alongside movies and series."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muestra los canales que has visto junto a películas y series."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Affiche les chaînes que vous avez regardées à côté des films et des séries."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra i canali che hai guardato insieme a film e serie."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "視聴したチャンネルを映画やシリーズと一緒に表示します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시청한 채널을 영화 및 시리즈와 함께 표시합니다."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostra os canais que você assistiu junto com filmes e séries."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将你看过的频道与电影和剧集一起显示。"
           }
         }
       }

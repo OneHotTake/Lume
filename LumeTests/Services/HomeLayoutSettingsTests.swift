@@ -174,6 +174,10 @@ struct HomeLayoutSettingsTests {
         #expect(HomeLayoutSettings.resolve(orderRaw: "sports,favorites").last == .downloads)
     }
 
+    @Test func `recently watched includes live tv by default`() {
+        #expect(HomeLayoutSettings.recentlyWatchedIncludesLiveTVDefault)
+    }
+
     // MARK: - HomeSection properties
 
     @Test func `home section all cases are unique`() {

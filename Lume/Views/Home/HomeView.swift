@@ -53,6 +53,8 @@ struct HomeView: View {
     /// Layout › Home). "For You" is gated by `recommendationsEnabled` instead.
     @AppStorage(HomeLayoutSettings.disabledSectionsKey) private var disabledSectionsRaw = ""
     @AppStorage(HomeLayoutSettings.enabledSectionsKey) private var enabledSectionsRaw = ""
+    @AppStorage(HomeLayoutSettings.recentlyWatchedIncludesLiveTVKey)
+    private var recentlyWatchedIncludesLiveTV = HomeLayoutSettings.recentlyWatchedIncludesLiveTVDefault
     /// Bumped by the DEBUG "Recalculate" action in Settings (always 0 otherwise);
     /// part of the task id so the row recomputes on demand.
     @AppStorage(RecommendationSettings.manualRecalculationKey) private var recommendationsRecalcToken = 0
@@ -350,9 +352,11 @@ struct HomeView: View {
 
     private var recentlyWatched: [HomeMediaItem] {
         let scope = scopeMatcher
-        let items = watchedMovies.filter { scope.contains($0.id, .movies) }.excludingRestricted(restriction).map(HomeMediaItem.movie)
+        var items = watchedMovies.filter { scope.contains($0.id, .movies) }.excludingRestricted(restriction).map(HomeMediaItem.movie)
             + watchedSeries.filter { scope.contains($0.id, .series) }.excludingRestricted(restriction).map(HomeMediaItem.series)
-            + watchedStreams.filter { scope.contains($0.id, .liveTV) }.excludingRestricted(restriction).map(HomeMediaItem.live)
+        if recentlyWatchedIncludesLiveTV {
+            items += watchedStreams.filter { scope.contains($0.id, .liveTV) }.excludingRestricted(restriction).map(HomeMediaItem.live)
+        }
         return items
             .sorted { ($0.lastWatchedDate ?? .distantPast) > ($1.lastWatchedDate ?? .distantPast) }
             .prefix(10)
