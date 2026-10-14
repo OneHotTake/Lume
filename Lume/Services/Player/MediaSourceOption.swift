@@ -166,7 +166,8 @@ nonisolated enum MediaSourceAutoPick {
     struct Context {
         /// The "Choose Source Before Playing" setting.
         var choosesBeforePlaying: Bool
-        /// Whether playback resumes partway in, which reuses the last pick.
+        /// Whether playback resumes partway in; reuses the last pick only
+        /// when choosing before playback is disabled.
         var isResuming: Bool
         /// The version last picked for this title on this device.
         var rememberedId: String?
@@ -183,6 +184,11 @@ nonisolated enum MediaSourceAutoPick {
     /// one silently would hide which release is broken.
     static func pick(from options: [MediaSourceOption], context: Context) -> MediaSourceOption? {
         guard !options.isEmpty, context.failedIds.isEmpty else { return nil }
+        // A remembered source may have stuttered without failing startup.
+        // Respect an explicit request to choose again when resuming it.
+        if context.choosesBeforePlaying, context.isResuming, options.count > 1 {
+            return nil
+        }
         if context.isResuming, let remembered = context.rememberedId,
            let match = options.first(where: { $0.id == remembered })
         {

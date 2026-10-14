@@ -18,6 +18,8 @@ struct MediaSourcePickerView: View {
     let isLoading: Bool
     let currentId: String?
     let failedIds: Set<String>
+    /// Previous choice before playback; distinct from a currently playing row.
+    var rememberedId: String?
     /// Set when the lookup found nothing playable; replaces the list.
     var failureMessage: String?
     var onRetry: (() -> Void)?
@@ -151,7 +153,8 @@ struct MediaSourcePickerView: View {
             .onAppear {
                 // `defaultFocus` alone doesn't take inside a freshly swapped
                 // player body; place focus explicitly once the rows exist.
-                let first = options.first { $0.id == currentId } ?? options.first { !failedIds.contains($0.id) }
+                let preferredId = currentId ?? rememberedId
+                let first = options.first { $0.id == preferredId } ?? options.first { !failedIds.contains($0.id) }
                 Task { @MainActor in focusedId = first?.id }
             }
         #endif
@@ -160,7 +163,10 @@ struct MediaSourcePickerView: View {
     @ViewBuilder
     private func row(_ option: MediaSourceOption) -> some View {
         let button = Button { onPick(option) } label: {
-            MediaSourceRow(option: option, isCurrent: option.id == currentId, hasFailed: failedIds.contains(option.id))
+            MediaSourceRow(
+                option: option, isCurrent: option.id == currentId,
+                isRemembered: option.id == rememberedId, hasFailed: failedIds.contains(option.id)
+            )
         }
         .accessibilityElement(children: .combine)
         #if os(tvOS)
@@ -206,6 +212,7 @@ struct MediaSourcePickerView: View {
 private struct MediaSourceRow: View {
     let option: MediaSourceOption
     let isCurrent: Bool
+    let isRemembered: Bool
     let hasFailed: Bool
 
     var body: some View {
@@ -246,7 +253,7 @@ private struct MediaSourceRow: View {
                         .lineLimit(Metrics.labelLines)
                         .multilineTextAlignment(.leading)
                 }
-                if isCurrent || hasFailed {
+                if isCurrent || isRemembered || hasFailed {
                     status
                 }
             }
@@ -284,10 +291,14 @@ private struct MediaSourceRow: View {
             Label("Didn't play", systemImage: "exclamationmark.triangle.fill")
                 .font(Metrics.detailFont.weight(.semibold))
                 .foregroundStyle(.orange)
-        } else {
+        } else if isCurrent {
             Label("Playing", systemImage: "checkmark")
                 .font(Metrics.detailFont.weight(.semibold))
                 .foregroundStyle(.green)
+        } else {
+            Label("Last Used", systemImage: "checkmark")
+                .font(Metrics.detailFont.weight(.semibold))
+                .foregroundStyle(.cyan)
         }
     }
 

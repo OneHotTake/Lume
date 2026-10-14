@@ -118,16 +118,31 @@ struct JellyfinMediaSourceTests {
         #expect(MediaSourceAutoPick.pick(from: options, context: plays)?.id == "a")
     }
 
-    @Test func `resuming reopens the remembered version while it is offered`() {
+    @Test func `resuming still asks when choosing before playback is enabled`() {
         let options = [option("a"), option("b")]
         var context = MediaSourceAutoPick.Context(choosesBeforePlaying: true, isResuming: true, rememberedId: "b")
-        #expect(MediaSourceAutoPick.pick(from: options, context: context)?.id == "b")
+        #expect(MediaSourceAutoPick.pick(from: options, context: context) == nil)
         context.rememberedId = "gone"
         #expect(MediaSourceAutoPick.pick(from: options, context: context) == nil)
         // From the start, a remembered pick doesn't skip the question.
         context.rememberedId = "b"
         context.isResuming = false
         #expect(MediaSourceAutoPick.pick(from: options, context: context) == nil)
+    }
+
+    @Test func `resuming reuses the remembered version only when choosing is disabled`() {
+        let options = [option("a"), option("b")]
+        var context = MediaSourceAutoPick.Context(choosesBeforePlaying: false, isResuming: true, rememberedId: "b")
+        #expect(MediaSourceAutoPick.pick(from: options, context: context)?.id == "b")
+        context.rememberedId = "gone"
+        #expect(MediaSourceAutoPick.pick(from: options, context: context)?.id == "a")
+    }
+
+    @Test func `a release group cannot skip the picker when resuming with choosing enabled`() {
+        let options = [option("a", bingeGroup: "g1"), option("b", bingeGroup: "g2")]
+        let context = MediaSourceAutoPick.Context(choosesBeforePlaying: true, isResuming: true, rememberedId: "b", bingeGroup: "g2")
+        #expect(MediaSourceAutoPick.pick(from: options, context: context) == nil)
+        #expect(MediaSourceAutoPick.pick(from: [options[1]], context: context)?.id == "b")
     }
 
     @Test func `the next episode follows the session's release group`() {

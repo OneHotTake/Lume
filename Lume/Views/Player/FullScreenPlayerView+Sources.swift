@@ -68,6 +68,7 @@ extension FullScreenPlayerView {
             isLoading: sourceSession.phase == .loading || sourceSession.phase == .idle,
             currentId: nil,
             failedIds: sourceSession.failedIds,
+            rememberedId: sourceSession.rememberedOptionId,
             failureMessage: failure,
             onRetry: { Task { _ = await resolveSources(refresh: true) } },
             onPick: { option in

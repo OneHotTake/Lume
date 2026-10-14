@@ -43,6 +43,16 @@ final class PlayerSourceSession {
     /// The mid-playback picker, opened from the player's Sources control.
     var isPresentingSwitcher = false
 
+    /// Marks the last choice without automatically starting it. A missing or
+    /// failed version must not be presented as the suggested choice.
+    var rememberedOptionId: String? {
+        guard let base,
+              let id = MediaSourcePreferences.rememberedSourceId(for: base.contentRef),
+              options.contains(where: { $0.id == id }), !failedIds.contains(id)
+        else { return nil }
+        return id
+    }
+
     /// The stream the session resolved for, by `PlayableMedia.id`.
     private var mediaID: String?
     private var base: PlayableMedia?
@@ -146,8 +156,8 @@ final class PlayerSourceSession {
         resolved = resolved?.resuming(at: position)
     }
 
-    /// Every play is remembered, auto-picked or not, so resuming the title
-    /// later reopens the version it was left on.
+    /// Every play is remembered, auto-picked or not, so reopening can mark
+    /// the last choice or reuse it when choosing before playback is disabled.
     private func play(_ option: MediaSourceOption, startTime: TimeInterval) {
         guard let base else { return }
         resolved = JellyfinSourceResolver.media(base, playing: option, headers: headers, startTime: startTime)
